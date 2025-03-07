@@ -22,12 +22,16 @@ fn main() {
                               .next()
                               .unwrap();
 
+    println!("{}", interface);
+
     // Create a new channel, dealing with layer 2 packets
     let (mut tx, mut rx) = match datalink::channel(&interface, Default::default()) {
         Ok(Ethernet(tx, rx)) => (tx, rx),
         Ok(_) => panic!("Unhandled channel type"),
         Err(e) => panic!("An error occurred when creating the datalink channel: {}", e)
     };
+
+    println!("start packet capture");
 
     loop {
         match rx.next() {
@@ -36,9 +40,13 @@ fn main() {
 
                 if let Some(ipv4_packet) = Ipv4Packet::new(packet.payload()) {
                     if ipv4_packet.get_next_level_protocol() == pnet::packet::ip::IpNextHeaderProtocols::Udp
- {
-    println!("UDP");
- }                }
+                    {
+                        if let Some(udp_packet) = UdpPacket::new(ipv4_packet.payload()) {
+                            println!("UDP Header: {:?}", udp_packet);
+                            println!("UDP Payload: {:?}", udp_packet.payload());
+                        }
+                    }                
+                }
             },
             Err(e) => {
                 // If an error occurs, we can handle it here

@@ -1,62 +1,11 @@
-use pcap::{Capture, Device};
-use pnet::packet::{Packet, udp::{UdpPacket}, dns::{DnsPacket}};
-
-fn main() {
-    // nic 설정
-    let device = Device::list().unwrap().into_iter()
-        .find(|d| d.name == "ens33")
-        .unwrap();
-
-    // pcap 오픈
-    let mut cap = Capture::from_device(device)
-        .unwrap()
-        .promisc(true)
-        .immediate_mode(true)
-        .snaplen(1600)
-        .open()
-        .unwrap();
-
-    // 필터설정
-    cap.filter("udp port 53", true).unwrap(); 
-
-    println!("start packet capture");
-
-    // 루프프
-    while let Ok(packet) = cap.next_packet() {
-        // udp
-        if let Some(udp_packet) = UdpPacket::new(packet.data) {
-            // 53번 - dns
-            if udp_packet.get_destination() == 53 || udp_packet.get_destination() == 53 {
-                // dns 패킷 파싱
-                if let Some(dns_packet) = DnsPacket::new(udp_packet.payload()) {
-                    let dns_header = dns_packet.header;
-                    
-                    // if dns_packet.get_queries() == 0 {
-                    //     println!("DNS request: {:?}", dns_packet);
-                    // } else {
-                    //     println!("DNS response: {:?}", dns_packet);
-                    // }
-                }
-            }
-        }
-    }
-
-    println!("end packet capture");
-}
-
-
-
-
----------------------------------------
-
-
-
 extern crate pnet;
 
 use pnet::datalink::{self, NetworkInterface};
 use pnet::datalink::Channel::Ethernet;
 use pnet::packet::{Packet, MutablePacket};
 use pnet::packet::ethernet::{EthernetPacket, MutableEthernetPacket};
+use pnet::packet::ipv4::{Ipv4Packet};
+use pnet::packet::udp::{UdpPacket};
 
 use std::env;
 
@@ -73,6 +22,8 @@ fn main() {
                               .next()
                               .unwrap();
 
+    println!("{}", interface);
+
     // Create a new channel, dealing with layer 2 packets
     let (mut tx, mut rx) = match datalink::channel(&interface, Default::default()) {
         Ok(Ethernet(tx, rx)) => (tx, rx),
@@ -80,28 +31,21 @@ fn main() {
         Err(e) => panic!("An error occurred when creating the datalink channel: {}", e)
     };
 
+    println!("start packet capture");
+
     loop {
         match rx.next() {
             Ok(packet) => {
                 let packet = EthernetPacket::new(packet).unwrap();
 
-                // Constructs a single packet, the same length as the one received,
-                // using the provided closure. This allows the packet to be constructed
-                // directly in the write buffer, without copying. If copying is not a
-                // problem, you could also use send_to.
-                //
-                // The packet is sent once the closure has finished executing.
-                tx.build_and_send(1, packet.packet().len(),
-                    &mut |mut new_packet| {
-                    let mut new_packet = MutableEthernetPacket::new(new_packet).unwrap();
-
-                        // Create a clone of the original packet
-                        new_packet.clone_from(&packet);
-
-                        // Switch the source and destination
-                        new_packet.set_source(packet.get_destination());
-                        new_packet.set_destination(packet.get_source());
-                });
+                if let Some(ipv4_packet) = Ipv4Packet::new(packet.payload()) {
+                    println!("###########");
+                    println!("{:?}", ipv4_packet);
+                    // if ipv4_packet.get_next_level_protocol() == pnet::packet::ip::IpNextHeaderProtocols::Udp
+                //  {
+                //     println!("UDP");
+                //  }                
+                }
             },
             Err(e) => {
                 // If an error occurs, we can handle it here
